@@ -1,0 +1,49 @@
+version: "3.8"
+services:
+
+  # Database container for development
+  db:
+    image: postgres:12.0-alpine
+    container_name: performance-db
+    hostname: db
+    depends_on:
+      - proxy
+    volumes:
+      - db-data:${DC_DB_VOLUME}
+    environment:
+      POSTGRES_PASSWORD: ${DC_POSTGRES_PW}
+      POSTGRES_USER: ${DC_POSTGRES_USER}
+      POSTGRES_DB: ${DC_POSTGRES_DB}
+
+
+  # Container to fetch data from a GCP DB and insert it in local db
+  fetch-data:
+    image: postgres:12.0-alpine
+    container_name: fetch-data-db
+    user: postgres
+    depends_on:
+      - db
+    volumes:
+      - ./fetch-data/fetch-data.sh:/var/lib/postgresql/fetch-data.sh
+    environment:
+      POSTGRES_PASSWORD: ${DC_POSTGRES_PW}
+      POSTGRES_USER: ${DC_POSTGRES_USER}
+      POSTGRES_DB: ${DC_POSTGRES_DB}
+      GCP_POSTGRES_PW: ${DC_GCP_POSTGRES_PW}
+      GCP_POSTGRES_DB: ${DC_GCP_POSTGRES_DB}
+      GCP_POSTGRES_USER: ${DC_GCP_POSTGRES_USER}
+    entrypoint: /var/lib/postgresql/fetch-data.sh
+    
+
+  # GCloud Proxy Container to help connect with DB on GCP
+  proxy:
+    image: gcr.io/cloudsql-docker/gce-proxy:1.19.1
+    container_name: gcp-cloudsql-proxy
+    hostname: proxy
+    volumes:
+      - ./secrets/sql-access.json:/config
+    command: /cloud_sql_proxy -instances=${DC_GCP_DB_CONNECTION_NAME}=tcp:0.0.0.0:5432 -credential_file=/config
+
+
+volumes:
+  db-data:
